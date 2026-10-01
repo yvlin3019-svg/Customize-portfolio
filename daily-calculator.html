@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>カスタマイズ 日次売上計算</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9EDF0; --surface:#FFFFFF; --ink:#1C2733; --muted:#5E6B78; --line:#CDD5DC;
+  --sale:#C23A2B; --sale-soft:#F8E4E1; --full:#1D5F5B; --full-soft:#DDEDEB; --tape:#FBFBF7;
+  --focus:#2F6FD6;
+  --num:"Barlow Semi Condensed","Noto Sans JP",system-ui,sans-serif;
+  --text:"Noto Sans JP","Hiragino Sans","Yu Gothic","Meiryo",system-ui,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#151B21; --surface:#1F2830; --ink:#E6ECF1; --muted:#9AA7B3; --line:#34414C;
+    --sale:#EE7A6B; --sale-soft:#3A2522; --full:#6CC3BA; --full-soft:#1D3533; --tape:#252F38;
+    --focus:#7FA9F0;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151B21; --surface:#1F2830; --ink:#E6ECF1; --muted:#9AA7B3; --line:#34414C;
+  --sale:#EE7A6B; --sale-soft:#3A2522; --full:#6CC3BA; --full-soft:#1D3533; --tape:#252F38;
+  --focus:#7FA9F0;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--text);font-size:16px;line-height:1.55}
+.wrap{max-width:1040px;margin:0 auto;padding:20px 16px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+h1{font-size:1.45rem;margin:0;font-weight:700;letter-spacing:.02em}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+label.inline{display:flex;align-items:center;gap:6px;font-size:.9rem;color:var(--muted)}
+input,select,button{font:inherit;color:inherit}
+input[type=date],select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+@media (max-width:820px){
+  .layout{grid-template-columns:1fr;gap:14px}
+  .layout > main{display:contents}
+  .layout .panel + .panel{margin-top:0}
+  .tape{order:2}
+  section[aria-labelledby="listTitle"]{order:3}
+}
+
+/* receipt tape: the one memorable element */
+.tape{background:var(--tape);border:1px solid var(--line);padding:20px 20px 26px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);
+  -webkit-mask:radial-gradient(circle 7px at 50% 100%,transparent 6.5px,#000 7px) 0 0/18px 100% repeat-x;
+          mask:radial-gradient(circle 7px at 50% 100%,transparent 6.5px,#000 7px) 0 0/18px 100% repeat-x}
+@media (max-width:820px){.tape{position:static}}
+.tape h2{font-size:1rem;margin:0 0 2px}
+.tape .date{color:var(--muted);font-size:.85rem;margin-bottom:14px}
+.row{display:grid;grid-template-columns:1fr auto;gap:4px 8px;align-items:baseline;padding:12px 0;border-top:1px dashed var(--line)}
+.row .n{font-family:var(--num);font-weight:600;color:var(--muted)}
+.row .lbl{font-size:.95rem}
+.row .val{font-family:var(--num);font-weight:700;font-size:1.7rem;line-height:1;font-variant-numeric:tabular-nums;text-align:right}
+.row .val small{font-size:.9rem;font-weight:600;margin-left:2px;color:var(--muted)}
+.row .sub{grid-column:1 / 3;font-size:.82rem;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.row .sub b{font-family:var(--num);font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.group{margin-top:14px}
+.group h3{font-size:.9rem;margin:0 0 2px;padding-left:8px;border-left:4px solid var(--ink)}
+.group.full h3{border-color:var(--full);color:var(--full)}
+.group.full .val{color:var(--full)}
+.summary{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:4px}
+.summary p{margin:0 0 10px;font-size:.98rem;line-height:1.7;word-break:normal;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.summary .btn{width:100%;font-weight:700}
+
+/* entry form */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.panel + .panel{margin-top:16px}
+.panel h2{font-size:1.05rem;margin:0 0 12px}
+.types{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.types button{border:2px solid var(--line);background:transparent;border-radius:10px;padding:12px;font-weight:700;font-size:1.05rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.types button[aria-pressed=true].sale{border-color:var(--sale);background:var(--sale-soft);color:var(--sale)}
+.types button[aria-pressed=true].full{border-color:var(--full);background:var(--full-soft);color:var(--full)}
+.fields{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:12px}
+@media (max-width:520px){.fields{grid-template-columns:1fr 1fr}.fields .price{grid-column:1 / 3}}
+.mono{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.mono h2{margin:0}
+.mono p{margin:2px 0 0;font-size:.82rem;color:var(--muted)}
+.mono .stepper{width:180px}
+.field label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+.stepper{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.stepper button{width:42px;border:0;background:var(--bg);font-size:1.2rem;cursor:pointer}
+.stepper input{width:100%;min-width:0;border:0;text-align:center;font-family:var(--num);font-size:1.3rem;font-weight:600;padding:8px 0;background:transparent}
+.price-in{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;padding:0 10px;background:var(--surface)}
+.price-in span{color:var(--muted)}
+.price-in input{width:100%;min-width:0;border:0;background:transparent;font-family:var(--num);font-size:1.3rem;font-weight:600;padding:8px 6px;text-align:right}
+input[type=number]{-moz-appearance:textfield}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.hint{font-size:.82rem;color:var(--muted);margin:10px 0 0}
+.err{color:var(--sale);font-size:.88rem;min-height:1.3em;margin:8px 0 0}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink);font-weight:700;padding:12px 18px;width:100%;margin-top:6px;font-size:1.05rem}
+.btn.danger{color:var(--sale)}
+.btn.small{padding:4px 10px;font-size:.85rem}
+
+/* list */
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.95rem;min-width:460px}
+th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-size:.8rem;color:var(--muted);font-weight:500}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+td.num{font-family:var(--num);font-weight:600;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.tag{display:inline-block;font-size:.78rem;font-weight:700;padding:1px 8px;border-radius:4px}
+.tag.sale{background:var(--sale-soft);color:var(--sale)}
+.tag.full{background:var(--full-soft);color:var(--full)}
+.empty{color:var(--muted);text-align:center;padding:24px 8px}
+.listhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.listhead h2{margin:0}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:8px 16px;border-radius:8px;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+.toast.action{pointer-events:auto;display:flex;white-space:nowrap;align-items:center;gap:14px}
+.toast button{background:transparent;border:1px solid currentColor;color:inherit;border-radius:6px;padding:3px 10px;font-weight:700;cursor:pointer}
+@media (max-width:600px){
+  table{min-width:0}
+  thead{display:none}
+  tbody tr{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--line)}
+  tbody td{border:0;padding:0;text-align:left;white-space:normal}
+  tbody td:nth-child(1){grid-row:1;grid-column:1;align-self:center;color:var(--muted)}
+  tbody td:nth-child(2){grid-row:1;grid-column:2 / 4;align-self:center}
+  tbody td.del{grid-row:1;grid-column:4;text-align:right}
+  tbody td.num{font-size:1rem}
+  tbody td[data-label]::before{content:attr(data-label);display:block;font-family:var(--text);font-size:.72rem;font-weight:400;color:var(--muted)}
+  tbody td.empty{grid-column:1 / -1;text-align:center}
+  tbody tr:has(td.empty){display:block}
+}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+
+/* compact */
+.wrap{padding:14px 12px 40px}
+header.top{margin-bottom:12px}
+h1{font-size:1.2rem}
+.layout{gap:12px}
+.panel{padding:12px 14px}
+.panel + .panel{margin-top:10px}
+.panel h2{font-size:.95rem;margin:0 0 8px}
+.types{gap:8px;margin-bottom:10px}
+.types button{padding:7px;font-size:.95rem;border-width:1.5px}
+.fields{gap:8px}
+.field label{font-size:.76rem;margin-bottom:2px}
+.stepper button{width:34px;font-size:1.05rem}
+.stepper input{font-size:1.1rem;padding:5px 0}
+.price-in input{font-size:1.1rem;padding:5px 4px}
+.err{min-height:0;margin:6px 0 0}
+.err:empty{display:none}
+.btn.primary{padding:9px 14px;font-size:1rem;margin-top:8px}
+.mono{flex-wrap:nowrap}
+.mono h2{margin:0;font-size:.9rem}
+.mono .stepper{width:140px}
+.tape{padding:14px 14px 20px}
+.tape .date{margin-bottom:8px}
+.summary{padding:10px}
+.summary p{margin-bottom:8px}
+.summary .btn{padding:7px}
+.row{padding:7px 0}
+.row .val{font-size:1.3rem}
+.group{margin-top:8px}
+details.breakdown{margin-top:8px}
+details.breakdown > summary{cursor:pointer;font-size:.85rem;color:var(--muted);padding:4px 0}
+th,td{padding:6px 6px}
+@media (max-width:420px){
+  .fields{grid-template-columns:1fr 1fr 1.2fr}
+  .fields .price{grid-column:auto}
+  .stepper button{width:28px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>カスタマイズ 日次売上計算</h1>
+    <div class="controls">
+      <label class="inline">日付 <input type="date" id="date"></label>
+      <label class="inline">税率
+        <select id="tax"><option value="10">10%</option><option value="8">8%</option></select>
+      </label>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main>
+      <section class="panel" aria-labelledby="addTitle">
+        <h2 id="addTitle">1件追加</h2>
+        <div class="types" role="group" aria-label="商品の種類">
+          <button type="button" class="sale" data-type="sale" aria-pressed="true">デリート</button>
+          <button type="button" class="full" data-type="full" aria-pressed="false">マルチ</button>
+        </div>
+        <div class="fields">
+          <div class="field">
+            <label for="bags">カスタマイズ</label>
+            <div class="stepper">
+              <button type="button" data-step="bags" data-d="-1" aria-label="カスタマイズ数を1減らす">−</button>
+              <input type="number" id="bags" inputmode="numeric" min="0" value="1">
+              <button type="button" data-step="bags" data-d="1" aria-label="カスタマイズ数を1増やす">＋</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="acc">パーツ数</label>
+            <div class="stepper">
+              <button type="button" data-step="acc" data-d="-1" aria-label="パーツ数を1減らす">−</button>
+              <input type="number" id="acc" inputmode="numeric" min="0" value="0">
+              <button type="button" data-step="acc" data-d="1" aria-label="パーツ数を1増やす">＋</button>
+            </div>
+          </div>
+          <div class="field price">
+            <label for="price">金額（税込）</label>
+            <div class="price-in"><span>¥</span><input type="text" id="price" inputmode="numeric" autocomplete="off" placeholder="39,600"></div>
+          </div>
+        </div>
+        <p class="err" id="err" role="alert"></p>
+        <button type="button" class="btn primary" id="add">追加する</button>
+      </section>
+
+      <section class="panel mono" aria-labelledby="monoTitle">
+        <h2 id="monoTitle">モノグラミング（M）</h2>
+        <div class="stepper">
+          <button type="button" data-mono="-1" aria-label="M件数を1減らす">−</button>
+          <input type="number" id="monoDay" inputmode="numeric" min="0" value="0" aria-label="M件数">
+          <button type="button" data-mono="1" aria-label="M件数を1増やす">＋</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="listTitle">
+        <div class="listhead">
+          <h2 id="listTitle">当日の明細</h2>
+          <button type="button" class="btn small danger" id="clear">この日を全削除</button>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>#</th><th>種類</th><th>カスタマイズ</th><th>パーツ</th><th>税込</th><th>税抜</th><th></th></tr></thead>
+            <tbody id="list"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <aside class="tape" aria-live="polite">
+      <h2>当日合計</h2>
+      <div class="date" id="tapeDate"></div>
+
+      <div class="summary">
+        <p id="sentence"></p>
+        <button type="button" class="btn" id="copy">この文をコピー</button>
+      </div>
+
+      <details class="breakdown">
+        <summary>内訳を見る</summary>
+      <div class="group">
+        <h3>カスタマイズ（全体）</h3>
+        <div class="row"><span class="lbl">件数</span><span class="val" id="aCnt">0<small>件</small></span>
+          <div class="sub"><span>デリート <b id="aCntS">0</b></span><span>マルチ <b id="aCntF">0</b></span></div></div>
+        <div class="row"><span class="lbl">金額（税抜）</span><span class="val" id="aAmt">¥0</span>
+          <div class="sub"><span>デリート <b id="aAmtS">¥0</b></span><span>マルチ <b id="aAmtF">¥0</b></span></div></div>
+        <div class="row"><span class="lbl">unit</span><span class="val" id="aUnit">0<small>件</small></span>
+          <div class="sub"><span>カスタマイズ <b id="aUnitB">0</b></span><span>パーツ <b id="aUnitA">0</b></span></div></div>
+      </div>
+
+      <div class="group full">
+        <h3>マルチのみ</h3>
+        <div class="row"><span class="lbl">件数</span><span class="val" id="fCnt">0<small>件</small></span></div>
+        <div class="row"><span class="lbl">金額（税抜）</span><span class="val" id="fAmt">¥0</span>
+          <div class="sub"><span>税込 <b id="fAmtI">¥0</b></span></div></div>
+        <div class="row"><span class="lbl">unit</span><span class="val" id="fUnit">0<small>件</small></span>
+          <div class="sub"><span>カスタマイズ <b id="fUnitB">0</b></span><span>パーツ <b id="fUnitA">0</b></span></div></div>
+      </div>
+
+      <div class="group">
+        <h3>モノグラミング</h3>
+        <div class="row"><span class="lbl">M 件数</span><span class="val" id="mCnt">0<small>件</small></span></div>
+      </div>
+      </details>
+    </aside>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const comma = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const yen = n => '¥' + comma(n);
+  const int = v => { const n = parseInt(v,10); return isNaN(n) || n < 0 ? 0 : n; };
+
+  function todayStr(){
+    const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function load(key, fallback){
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(e){ return fallback; }
+  }
+  function save(key, val){ try { localStorage.setItem(key, JSON.stringify(val)); } catch(e){} }
+
+  let type = 'sale';
+  let entries = [];
+  const dateEl = $('date'), taxEl = $('tax');
+  dateEl.value = todayStr();
+  taxEl.value = String(load('settings:tax', 10));
+
+  const dayKey = () => 'sales:' + dateEl.value;
+  const rate = () => 1 + Number(taxEl.value) / 100;
+
+  let monoDay = 0;
+  const monoKey = () => 'mono:' + dateEl.value;
+  function loadDay(){
+    entries = load(dayKey(), []);
+    const saved = load(monoKey(), null);
+    // 旧データ（明細ごとの M）があれば引き継ぐ
+    monoDay = saved === null ? entries.reduce((a,e) => a + (e.mono || 0), 0) : saved;
+    $('monoDay').value = monoDay;
+    render();
+  }
+  function setMono(v){ monoDay = Math.max(0, v); $('monoDay').value = monoDay; save(monoKey(), monoDay); render(); }
+  document.querySelectorAll('[data-mono]').forEach(b => b.addEventListener('click', () => setMono(monoDay + Number(b.dataset.mono))));
+  $('monoDay').addEventListener('input', () => { monoDay = int($('monoDay').value); save(monoKey(), monoDay); render(); });
+  $('monoDay').addEventListener('change', () => setMono(int($('monoDay').value)));
+  function persist(){ save(dayKey(), entries); }
+
+  // type toggle
+  document.querySelectorAll('.types button').forEach(b => b.addEventListener('click', () => {
+    type = b.dataset.type;
+    document.querySelectorAll('.types button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  // steppers
+  document.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => {
+    const el = $(b.dataset.step);
+    const v = Math.max(0, int(el.value) + Number(b.dataset.d));
+    if (b.dataset.step === 'monoDay') setMono(v); else el.value = v;
+  }));
+
+  function add(){
+    const bags = int($('bags').value), acc = int($('acc').value);
+    const priceRaw = $('price').value.replace(/[^0-9]/g, '');
+    const price = Number(priceRaw);
+    if (bags + acc === 0){ $('err').textContent = 'カスタマイズ件数かパーツ数のどちらかを 1 以上にしてください。'; return; }
+    if (priceRaw === '' || isNaN(price) || price < 0){ $('err').textContent = 'この1件の税込金額を入力してください。'; $('price').focus(); return; }
+    $('err').textContent = '';
+    entries.push({ type, bags, acc, price });
+    persist(); render();
+    $('bags').value = 1; $('acc').value = 0; $('price').value = '';
+    $('price').focus();
+    toast('追加しました');
+  }
+  $('add').addEventListener('click', add);
+  // 金額入力を 1,000 形式で表示（全角数字も受け付ける）
+  $('price').addEventListener('input', e => {
+    const el = e.target;
+    const digits = el.value.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+    el.value = digits ? comma(Number(digits)) : '';
+  });
+  ['bags','acc','price'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); add(); } }));
+
+  $('list').addEventListener('click', e => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    const idx = Number(b.dataset.del);
+    const removed = entries.splice(idx, 1)[0]; persist(); render();
+    const day = dateEl.value;
+    toast((idx+1) + ' 件目を削除しました', '元に戻す', () => {
+      if (dateEl.value !== day) return;
+      entries.splice(Math.min(idx, entries.length), 0, removed); persist(); render(); toast('元に戻しました');
+    });
+  });
+  let clearArmed = false, clearTimer;
+  const clearBtn = $('clear'), clearLabel = clearBtn.textContent;
+  function disarmClear(){ clearArmed = false; clearTimeout(clearTimer); clearBtn.textContent = clearLabel; }
+  clearBtn.addEventListener('click', () => {
+    if (!entries.length && !monoDay){ toast('削除するデータがありません'); return; }
+    if (!clearArmed){
+      clearArmed = true; clearBtn.textContent = 'もう一度押して削除';
+      clearTimer = setTimeout(disarmClear, 4000); return;
+    }
+    disarmClear();
+    const day = dateEl.value, prevEntries = entries.slice(), prevMono = monoDay;
+    entries = []; persist(); setMono(0);
+    toast(day + ' のデータを削除しました', '元に戻す', () => {
+      if (dateEl.value !== day) return;
+      entries = prevEntries; persist(); setMono(prevMono); toast('元に戻しました');
+    });
+  });
+  dateEl.addEventListener('change', () => { disarmClear(); loadDay(); });
+  taxEl.addEventListener('change', () => { save('settings:tax', Number(taxEl.value)); render(); });
+
+  function totals(){
+    const t = { sBags:0, fBags:0, sAcc:0, fAcc:0, mono:monoDay, sIncl:0, fIncl:0 };
+    entries.forEach(e => {
+      if (e.type === 'sale'){ t.sBags += e.bags; t.sAcc += e.acc; t.sIncl += e.price; }
+      else { t.fBags += e.bags; t.fAcc += e.acc; t.fIncl += e.price; }
+    });
+    t.mono = monoDay;
+    t.bags = t.sBags + t.fBags; t.acc = t.sAcc + t.fAcc;
+    t.units = t.bags + t.acc; t.fUnits = t.fBags + t.fAcc;
+    t.sEx = t.sIncl / rate(); t.fEx = t.fIncl / rate(); t.allEx = t.sEx + t.fEx;
+    return t;
+  }
+  function sentence(t){
+    return t.bags + '件' + t.units + 'unit ' + yen(t.allEx) + '（マルチ' + t.fBags + '件' + t.fUnits + 'unit ' + yen(t.fEx) + '）M' + t.mono + '件';
+  }
+
+  function render(){
+    const t = totals();
+    $('tapeDate').textContent = dateEl.value + '・' + entries.length + ' 件・税率 ' + taxEl.value + '%';
+    $('sentence').textContent = sentence(t);
+    $('aCnt').innerHTML = t.bags + '<small>件</small>';
+    $('aCntS').textContent = t.sBags; $('aCntF').textContent = t.fBags;
+    $('aAmt').textContent = yen(t.allEx); $('aAmtS').textContent = yen(t.sEx); $('aAmtF').textContent = yen(t.fEx);
+    $('aUnit').innerHTML = t.units + '<small>件</small>';
+    $('aUnitB').textContent = t.bags; $('aUnitA').textContent = t.acc;
+    $('fCnt').innerHTML = t.fBags + '<small>件</small>';
+    $('fAmt').textContent = yen(t.fEx); $('fAmtI').textContent = yen(t.fIncl);
+    $('fUnit').innerHTML = t.fUnits + '<small>件</small>';
+    $('fUnitB').textContent = t.fBags; $('fUnitA').textContent = t.fAcc;
+    $('mCnt').innerHTML = t.mono + '<small>件</small>';
+
+    const tb = $('list');
+    if (!entries.length){ tb.innerHTML = '<tr><td colspan="7" class="empty">この日のデータはまだありません。上のフォームから追加してください。</td></tr>'; return; }
+    tb.innerHTML = entries.map((e,i) =>
+      '<tr><td>' + (i+1) + '</td>' +
+      '<td><span class="tag ' + e.type + '">' + (e.type === 'sale' ? 'デリート' : 'マルチ') + '</span></td>' +
+      '<td class="num" data-label="カスタマイズ">' + e.bags + '</td><td class="num" data-label="パーツ">' + e.acc + '</td>' +
+      '<td class="num" data-label="税込">' + yen(e.price) + '</td><td class="num" data-label="税抜">' + yen(e.price / rate()) + '</td>' +
+      '<td class="del"><button type="button" class="btn small danger" data-del="' + i + '" aria-label="' + (i+1) + ' 件目を削除">削除</button></td></tr>'
+    ).join('');
+  }
+
+  $('copy').addEventListener('click', () => {
+    const text = sentence(totals());
+    const done = () => toast('コピーしました');
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    } else fallbackCopy(text, done);
+  });
+  function fallbackCopy(text, done){
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); try { document.execCommand('copy'); done(); } catch(e){ toast('コピーできませんでした。手動で選択してください'); }
+    ta.remove();
+  }
+
+  let tt;
+  function toast(msg, actionLabel, onAction){
+    const el = $('toast'); el.textContent = msg; el.classList.toggle('action', !!actionLabel);
+    if (actionLabel){
+      const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = actionLabel;
+      btn.addEventListener('click', () => { el.classList.remove('show','action'); onAction(); });
+      el.appendChild(btn);
+    }
+    el.classList.add('show'); clearTimeout(tt);
+    tt = setTimeout(() => el.classList.remove('show','action'), actionLabel ? 6000 : 1400);
+  }
+
+  loadDay();
+})();
+</script>
+</body>
+</html>
